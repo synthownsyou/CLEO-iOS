@@ -115,7 +115,7 @@ impl ModResource {
         }
 
         let extension = extension.unwrap().to_str()?.to_lowercase();
-        let relative_to_cleo = path.strip_prefix(find_cleo_dir_path()).ok()?;
+        let relative_to_cleo = path.strip_prefix(find_resource_cleo_dir_path()).ok()?;
 
         if relative_to_cleo.starts_with("Replace") || relative_to_cleo.starts_with("replace") {
             return Some(ModResource::FileReplacement(path.to_path_buf()));
@@ -159,33 +159,61 @@ impl ModResource {
 }
 
 #[cached]
-fn find_cleo_dir_path() -> PathBuf {
+fn find_writable_cleo_dir_path() -> PathBuf {
     // Since iOS 13.5, we haven't been able to access the /var/mobile/Documents folder, so CLEO resources
-    //  moved to the game's data folder. This is harder to find for users, but allows compatibility with
-    //  basically any version of iOS.
+    // moved to the game's data folder. This is harder to find for users, but allows compatibility with
+    // basically any version of iOS.
+    //
+    // And now we've made the CLEO folder even harder to find by putting it INSIDE the app bundle.
+    // On the bright side, non-jailbroken users can finally mod GTA: SA too, so we'll call it a feature.
     let path = get_documents_path("CLEO");
 
     if !path.exists() {
-        log::warn!("CLEO folder was not found. It will be created.");
+        log::warn!("Writable CLEO folder was not found. It will be created.");
 
-        // Create the folder.
         if let Err(err) = std::fs::create_dir(&path) {
-            log::error!("Unable to create CLEO folder! Error: {}", err);
+            log::error!("Unable to create writable CLEO folder! Error: {}", err);
         }
     }
 
     path
 }
 
+#[cached]
+fn find_bundled_cleo_dir_path() -> Option<PathBuf> {
+    let mut path = loader::get_game_path()?;
+    path.push("CLEO");
+
+    if path.exists() && path.is_dir() {
+        log::info!("Found bundled CLEO directory at {:?}.", path);
+        Some(path)
+    } else {
+        log::info!("No bundled CLEO directory found in the app bundle.");
+        None
+    }
+}
+
+fn find_resource_cleo_dir_path() -> PathBuf {
+    // Prefer resources bundled directly into gta3sa.app/CLEO.
+    //
+    // This lets a sideloaded IPA carry its own CLEO mods without requiring filesystem access,
+    // Filza, a jailbreak, or sacrificing a goat to Apple's sandbox.
+    if let Some(path) = find_bundled_cleo_dir_path() {
+        return path;
+    }
+
+    find_writable_cleo_dir_path()
+}
+
 fn create_replace_dir() {
     let path_lower = {
-        let mut replace_path = find_cleo_dir_path();
+        let mut replace_path = find_writable_cleo_dir_path();
         replace_path.push("replace");
         replace_path
     };
 
     let path_upper = {
-        let mut replace_path = find_cleo_dir_path();
+        let mut replace_path = find_writable_cleo_dir_path();
         replace_path.push("Replace");
         replace_path
     };
@@ -225,7 +253,7 @@ fn create_archive_dirs() {
 
         if extension == "img" {
             let name_path = entry_path.strip_prefix(&game_dir).unwrap();
-            let mut new_folder_path = find_cleo_dir_path();
+            let mut new_folder_path = find_writable_cleo_dir_path();
             new_folder_path.push(name_path);
 
             let create_instruction_file = |mut path: PathBuf| {
@@ -269,7 +297,7 @@ pub fn shaders_path() -> PathBuf {
 }
 
 pub fn get_log_path() -> PathBuf {
-    let mut dir_path = find_cleo_dir_path();
+    let mut dir_path = find_writable_cleo_dir_path();
     dir_path.push("cleo.log");
 
     dir_path
@@ -286,7 +314,8 @@ pub fn get_documents_path(resource_name: &str) -> PathBuf {
 pub fn init() {
     log::info!("initialising resources...");
 
-    let cleo_path = find_cleo_dir_path();
+    let cleo_path = find_resource_cleo_dir_path();
+    log::info!("Using CLEO resource directory: {:?}", cleo_path);
 
     log::info!("Creating 'Replace' folder...");
     create_replace_dir();
