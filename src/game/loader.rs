@@ -20,6 +20,12 @@ pub fn get_game_path() -> Option<std::path::PathBuf> {
     Some(std::env::current_exe().ok()?.parent()?.to_path_buf())
 }
 
+pub fn get_bundled_cleo_path() -> Option<std::path::PathBuf> {
+    let mut path = get_game_path()?;
+    path.push("CLEO");
+    Some(path)
+}
+
 fn path_in_game_dir(path: &impl AsRef<std::path::Path>) -> Option<std::path::PathBuf> {
     let name = path.as_ref().file_name()?.to_str()?.to_string();
 
