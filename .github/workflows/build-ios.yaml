@@ -16,13 +16,14 @@ jobs:
 
       - name: Install host dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+            sudo apt-get update
+            sudo apt-get install -y \
             curl \
             xz-utils \
             dpkg \
             python3 \
-            build-essential
+            build-essential \
+            libtinfo5
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
