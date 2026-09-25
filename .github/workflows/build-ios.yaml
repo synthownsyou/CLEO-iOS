@@ -29,19 +29,32 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cleo-ios-linux
+          cache-on-failure: true
+
+      - name: Cache iOS toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: /opt/ios-toolchain
+          key: ios-toolchain-bingner-v10.0.0-2
+
       - name: Download Bingner iOS toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           curl -L \
             https://github.com/sbingner/llvm-project/releases/download/v10.0.0-2/linux-ios-arm64e-clang-toolchain.tar.lzma \
             -o /tmp/ios-toolchain.tar.lzma
 
-          mkdir -p /opt/ios-toolchain
-          tar --lzma -xf /tmp/ios-toolchain.tar.lzma -C /opt/ios-toolchain
+          sudo mkdir -p /opt/ios-toolchain
+          sudo tar --lzma \
+            -xf /tmp/ios-toolchain.tar.lzma \
+            -C /opt/ios-toolchain
 
-          echo "Toolchain contents:"
-          find /opt/ios-toolchain -maxdepth 3 -type f | head -100
-
-      - name: Locate toolchain binaries
+      - name: Locate iOS toolchain
         shell: bash
         run: |
           TOOLCHAIN_ROOT=$(find /opt/ios-toolchain -type d -name ios-arm64e-clang-toolchain | head -1)
@@ -55,32 +68,37 @@ jobs:
           echo "CLEO_CLANG=$TOOLCHAIN_ROOT/bin/clang" >> "$GITHUB_ENV"
           echo "CLEO_LDID=$TOOLCHAIN_ROOT/bin/ldid" >> "$GITHUB_ENV"
 
-          echo "clang:"
-          "$TOOLCHAIN_ROOT/bin/clang" --version || true
-
-          echo "ldid:"
-          "$TOOLCHAIN_ROOT/bin/ldid" -h || true
+      - name: Cache iOS SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: /opt/ios-sdk
+          key: ios-sdk-theos-current-v1
 
       - name: Download iOS SDK
-        shell: bash
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
-          mkdir -p /opt/ios-sdk
+          sudo mkdir -p /opt/ios-sdk
 
           curl -L \
             https://github.com/theos/sdks/archive/refs/heads/master.tar.gz \
             -o /tmp/theos-sdks.tar.gz
 
-          tar -xzf /tmp/theos-sdks.tar.gz -C /opt/ios-sdk
+          sudo tar -xzf /tmp/theos-sdks.tar.gz \
+            -C /opt/ios-sdk
 
+      - name: Locate iOS SDK
+        shell: bash
+        run: |
           SDK=$(find /opt/ios-sdk -type d -name "iPhoneOS*.sdk" | sort -V | tail -1)
 
           if [ -z "$SDK" ]; then
-            echo "Unable to locate an iPhoneOS SDK"
+            echo "Unable to locate iPhoneOS SDK"
             exit 1
           fi
 
-          echo "Using SDK: $SDK"
           echo "CLEO_IOS_SDK=$SDK" >> "$GITHUB_ENV"
+          echo "Using SDK: $SDK"
 
       - name: Show build environment
         run: |
@@ -90,6 +108,7 @@ jobs:
 
           rustc --version
           cargo --version
+          "$CLEO_CLANG" --version
 
       - name: Build CLEO
         run: |
@@ -97,16 +116,19 @@ jobs:
 
       - name: Show output
         run: |
-          find target/aarch64-apple-ios/release -maxdepth 1 -type f -print
+          find target/aarch64-apple-ios/release \
+            -maxdepth 1 \
+            -type f \
+            -print
 
       - name: Prepare artifact
         run: |
           mkdir -p artifact
 
-          if [ -f target/aarch64-apple-ios/release/libcleo.dylib ]; then
-            cp target/aarch64-apple-ios/release/libcleo.dylib artifact/cleo.dylib
-          elif [ -f target/aarch64-apple-ios/release/cleo.dylib ]; then
+          if [ -f target/aarch64-apple-ios/release/cleo.dylib ]; then
             cp target/aarch64-apple-ios/release/cleo.dylib artifact/cleo.dylib
+          elif [ -f target/aarch64-apple-ios/release/libcleo.dylib ]; then
+            cp target/aarch64-apple-ios/release/libcleo.dylib artifact/cleo.dylib
           else
             echo "CLEO dylib was not produced"
             exit 1
