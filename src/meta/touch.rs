@@ -319,6 +319,8 @@ impl TouchInterface {
 
     /// Receives and handles `event` in the context of previous touches.
     fn handle_event(&mut self, event: TouchEvent) {
+        log::info!("handle_event: {:?}", event);
+
         // Use the new timestamp as a reference point for removing old touch information.
         self.remove_stale_touches(event.info().timestamp);
 
@@ -560,6 +562,15 @@ impl MenuGesture {
 // todo: Don't pick up touches that have been handled by a non-joypad control.
 // fixme: `process_touch` nests too deeply and needs to be broken up into smaller functions.
 fn process_touch(x: f32, y: f32, timestamp: f64, force: f32, touch_type: u64) {
+    log::info!(
+        "TOUCH: x={} y={} time={} force={} type={}",
+        x,
+        y,
+        timestamp,
+        force,
+        touch_type
+    );
+    
     let event_type = match touch_type {
         0 => TouchEvent::Up,
         2 => TouchEvent::Down,
@@ -588,10 +599,10 @@ fn process_touch(x: f32, y: f32, timestamp: f64, force: f32, touch_type: u64) {
 pub fn update() {
     let mut touch_interface = TouchInterface::shared_mut();
 
-    // The screen size shouldn't change, but we'll fetch it just in case.
     touch_interface.fetch_viewport_size();
 
     if touch_interface.check_menu_trigger() {
+        log::info!("CLEO menu gesture detected; showing menu.");
         super::menu::MenuMessage::Show.send();
     }
 }
