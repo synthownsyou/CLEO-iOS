@@ -3,7 +3,6 @@
 
 use crate::meta::gui::CGRect;
 use crate::{call_original, targets};
-use cached::proc_macro::cached;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::error;
