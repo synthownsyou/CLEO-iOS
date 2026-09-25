@@ -8,41 +8,94 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            curl \
+            xz-utils \
+            dpkg \
+            python3 \
+            build-essential
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
           targets: aarch64-apple-ios
 
-      - name: Force cdylib output on macOS
+      - name: Download Bingner iOS toolchain
+        run: |
+          curl -L \
+            https://github.com/sbingner/llvm-project/releases/download/v10.0.0-2/linux-ios-arm64e-clang-toolchain.tar.lzma \
+            -o /tmp/ios-toolchain.tar.lzma
+
+          mkdir -p /opt/ios-toolchain
+          tar --lzma -xf /tmp/ios-toolchain.tar.lzma -C /opt/ios-toolchain
+
+          echo "Toolchain contents:"
+          find /opt/ios-toolchain -maxdepth 3 -type f | head -100
+
+      - name: Locate toolchain binaries
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          TOOLCHAIN_ROOT=$(find /opt/ios-toolchain -type d -name ios-arm64e-clang-toolchain | head -1)
 
-          p = Path("Cargo.toml")
-          s = p.read_text()
+          if [ -z "$TOOLCHAIN_ROOT" ]; then
+            echo "Unable to locate ios-arm64e-clang-toolchain"
+            exit 1
+          fi
 
-          s = s.replace(
-              'crate-type = ["staticlib"]',
-              'crate-type = ["cdylib"]'
-          )
+          echo "TOOLCHAIN_ROOT=$TOOLCHAIN_ROOT" >> "$GITHUB_ENV"
+          echo "CLEO_CLANG=$TOOLCHAIN_ROOT/bin/clang" >> "$GITHUB_ENV"
+          echo "CLEO_LDID=$TOOLCHAIN_ROOT/bin/ldid" >> "$GITHUB_ENV"
 
-          p.write_text(s)
-          PY
+          echo "clang:"
+          "$TOOLCHAIN_ROOT/bin/clang" --version || true
+
+          echo "ldid:"
+          "$TOOLCHAIN_ROOT/bin/ldid" -h || true
+
+      - name: Download iOS SDK
+        shell: bash
+        run: |
+          mkdir -p /opt/ios-sdk
+
+          curl -L \
+            https://github.com/theos/sdks/archive/refs/heads/master.tar.gz \
+            -o /tmp/theos-sdks.tar.gz
+
+          tar -xzf /tmp/theos-sdks.tar.gz -C /opt/ios-sdk
+
+          SDK=$(find /opt/ios-sdk -type d -name "iPhoneOS*.sdk" | sort -V | tail -1)
+
+          if [ -z "$SDK" ]; then
+            echo "Unable to locate an iPhoneOS SDK"
+            exit 1
+          fi
+
+          echo "Using SDK: $SDK"
+          echo "CLEO_IOS_SDK=$SDK" >> "$GITHUB_ENV"
+
+      - name: Show build environment
+        run: |
+          echo "CLEO_CLANG=$CLEO_CLANG"
+          echo "CLEO_LDID=$CLEO_LDID"
+          echo "CLEO_IOS_SDK=$CLEO_IOS_SDK"
+
+          rustc --version
+          cargo --version
 
       - name: Build CLEO
         run: |
-          cargo build \
-            --release \
-            --target aarch64-apple-ios
+          python3 build.py --release --verbose
 
-      - name: Show build output
+      - name: Show output
         run: |
           find target/aarch64-apple-ios/release -maxdepth 1 -type f -print
 
@@ -55,12 +108,12 @@ jobs:
           elif [ -f target/aarch64-apple-ios/release/cleo.dylib ]; then
             cp target/aarch64-apple-ios/release/cleo.dylib artifact/cleo.dylib
           else
-            echo "cleo dylib was not produced"
+            echo "CLEO dylib was not produced"
             exit 1
           fi
 
       - name: Upload CLEO dylib
         uses: actions/upload-artifact@v4
         with:
-          name: cleo-ios
+          name: cleo-ios-linux
           path: artifact/cleo.dylib
