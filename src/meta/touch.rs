@@ -598,5 +598,12 @@ pub fn update() {
 
 pub fn init() {
     log::info!("installing touch hook...");
+    log::info!(
+        "process_touch target address: {:p}",
+        targets::process_touch::get()
+    );
+
     targets::process_touch::install(process_touch);
+
+    log::info!("process_touch hook installation returned.");
 }
