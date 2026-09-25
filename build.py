@@ -83,7 +83,7 @@ if not building_dylib:
         dylib_path,
         "-isysroot",
         double_quoted(force_var("CLEO_IOS_SDK")),
-        "-target arm64-apple-darwin -framework CoreFoundation -framework Security",
+        "-target arm64-apple-darwin -lc++ -lc++abi -framework CoreFoundation -framework Security",
     ]
 
     clang_cmd = " ".join(clang_cmd)
