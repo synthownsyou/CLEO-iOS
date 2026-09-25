@@ -1,0 +1,66 @@
+name: Build CLEO iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Force cdylib output on macOS
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("Cargo.toml")
+          s = p.read_text()
+
+          s = s.replace(
+              'crate-type = ["staticlib"]',
+              'crate-type = ["cdylib"]'
+          )
+
+          p.write_text(s)
+          PY
+
+      - name: Build CLEO
+        run: |
+          cargo build \
+            --release \
+            --target aarch64-apple-ios
+
+      - name: Show build output
+        run: |
+          find target/aarch64-apple-ios/release -maxdepth 1 -type f -print
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p artifact
+
+          if [ -f target/aarch64-apple-ios/release/libcleo.dylib ]; then
+            cp target/aarch64-apple-ios/release/libcleo.dylib artifact/cleo.dylib
+          elif [ -f target/aarch64-apple-ios/release/cleo.dylib ]; then
+            cp target/aarch64-apple-ios/release/cleo.dylib artifact/cleo.dylib
+          else
+            echo "cleo dylib was not produced"
+            exit 1
+          fi
+
+      - name: Upload CLEO dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleo-ios
+          path: artifact/cleo.dylib
