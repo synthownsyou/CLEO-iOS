@@ -570,7 +570,7 @@ fn process_touch(x: f32, y: f32, timestamp: f64, force: f32, touch_type: u64) {
         force,
         touch_type
     );
-    
+
     let event_type = match touch_type {
         0 => TouchEvent::Up,
         2 => TouchEvent::Down,
@@ -589,7 +589,6 @@ fn process_touch(x: f32, y: f32, timestamp: f64, force: f32, touch_type: u64) {
 
     TouchInterface::shared_mut().handle_event(event);
 
-    // hack: Find a better place to call this.
     update();
 
     call_original!(targets::process_touch, x, y, timestamp, force, touch_type);
@@ -609,12 +608,6 @@ pub fn update() {
 
 pub fn init() {
     log::info!("installing touch hook...");
-    log::info!(
-        "process_touch target address: {:p}",
-        targets::process_touch::get()
-    );
-
     targets::process_touch::install(process_touch);
-
     log::info!("process_touch hook installation returned.");
 }
